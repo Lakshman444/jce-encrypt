@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:crypto="http://www.mulesoft.org/schema/mule/crypto"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/crypto http://www.mulesoft.org/schema/mule/crypto/current/mule-crypto.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<json-logger:config name="JSON_Logger_Config" doc:name="JSON Logger Config" doc:id="c65e92b6-04ec-43a5-a0fc-7fe15cc9a30b" environment="${mule.env}" logLocationInfo="false" contentFieldsDataMasking="$..id">
+		<json-logger:external-destination >
+			<json-logger:jms-destination queueDestination="jsonlogger" jmsConfigurationRef="JMS_Config"/>
+		</json-logger:external-destination>
+	</json-logger:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="178f884e-4c07-41fe-b1c6-0f5891a5720f" file="log.properties" />
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="5de82ad7-ea9c-4a02-96b4-2b7cd9fdb873" >
+		<jms:active-mq-connection username="admin" password="admin" >
+			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+		</jms:active-mq-connection>
+	</jms:config>
+	<crypto:jce-config name="Crypto_Jce" doc:name="Crypto Jce" doc:id="50946fd0-c086-4b4c-9292-a7a992a824b6" keystore="aeskeystore.jck" type="JCEKS" password="mulesoft" >
+		<crypto:jce-key-infos >
+			<crypto:jce-symmetric-key-info keyId="aes128" alias="aeskey" password="mulesoft" />
+		</crypto:jce-key-infos>
+	</crypto:jce-config>
+	<http:listener-config name="HTTP_Listener_config5" doc:name="HTTP Listener config" doc:id="363fb09f-ddef-4d69-8513-24541826c78d" >
+		<http:listener-connection host="0.0.0.0" port="8085" />
+	</http:listener-config>
+	<http:listener-config name="HTTP_Listener_config2" doc:name="HTTP Listener config" doc:id="4ab27954-79cc-42e2-9de1-f1e293321c9a" >
+		<http:listener-connection host="0.0.0.0" port="8082" />
+	</http:listener-config>
+	<flow name="demo1.1Flow" doc:id="51c27084-552e-4be0-9476-b5c9fcfd1550" >
+		<http:listener doc:name="Listener" doc:id="fe99d37c-42ce-457c-bc43-79ac0ae2efbc" config-ref="HTTP_Listener_config5" path="/demo1">
+			<http:response >
+				<http:body ><![CDATA[#[output application/xml --- payload]]]></http:body>
+			</http:response>
+		</http:listener>
+		<set-payload value="#[payload]" doc:name="Set Payload" doc:id="b6ef2178-2593-4b30-ba89-9a9d3f336914" />
+	</flow>
+	<flow name="demo1.1Flow2" doc:id="46953a9c-0ffd-468e-ba46-61a0845bf000" >
+		<http:listener doc:name="Listener" doc:id="2241bbfe-81a4-4b70-8269-7fb3d8a71c47" path="/encrypt" config-ref="HTTP_Listener_config5"/>
+		<crypto:jce-encrypt doc:name="Jce encrypt" doc:id="737ea6da-372f-4e4f-a1e9-baf1d771aa75" config-ref="Crypto_Jce" algorithm="AES" keyId="aes128"/>
+		<logger level="INFO" doc:name="Logger" doc:id="b6b845c8-16e6-4afe-9129-701cb1e65801" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="1619ae4c-16d6-4ae2-b7cf-ecf4083dcaf9" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import dw::Crypto
+import toBase64 from dw::core::Binaries
+output application/json
+---
+toBase64(payload)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="demo1.1Flow3" doc:id="4d81f4b2-7ece-4019-96cd-03341ec94537" >
+		<http:listener doc:name="Listener" doc:id="65a18ba7-f3a4-446c-83cb-35ea0e2ad1d0" path="/decrypt" config-ref="HTTP_Listener_config5"/>
+		<ee:transform doc:name="Transform Message" doc:id="fd759250-158a-411a-8ee6-c26d8a3acc51" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import fromBase64 from dw::core::Binaries
+output application/octet-stream
+---
+fromBase64(payload)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="2c8d5212-58fe-47e2-b32d-bbb0f33e07d9" message="#[payload]"/>
+		<crypto:jce-decrypt doc:name="Jce decrypt" doc:id="92c81383-3ccf-49cf-aac8-d74ff49061ef" config-ref="Crypto_Jce" algorithm="AES" keyId="aes128"/>
+	</flow>
+	<flow name="demo1.1Flow4" doc:id="15090eb8-4c54-4724-8679-4a25cf14e321" >
+		<http:listener doc:name="Listener" doc:id="48b9eaa0-23d1-4cb8-9e0f-d3f90d5fa905" config-ref="HTTP_Listener_config5" path="/xencrypt"/>
+		<crypto:xml-encrypt doc:name="Xml encrypt" doc:id="46eb5245-c5e8-41f1-8626-de671f24f32d" config-ref="Crypto_Jce" keyId="aes128"/>
+	</flow>
+	<flow name="demo1.1Flow5" doc:id="b5ac3164-eda3-4ce1-a122-51350edd45e0" >
+		<http:listener doc:name="Listener" doc:id="45e7d80b-7b1a-4b02-ace4-e746a6d9f6ce" config-ref="HTTP_Listener_config5" path="/xdecrypt"/>
+		<crypto:xml-decrypt doc:name="Xml decrypt" doc:id="7c10cef4-f129-4d78-81fa-3c78acdc5af7" config-ref="Crypto_Jce" keyId="aes128"/>
+	</flow>
+</mule>
